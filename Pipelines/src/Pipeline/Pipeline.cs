@@ -5,7 +5,9 @@ public class Pipeline
 {
 
     private List<Func<Result, Task<Result>>> steps = new List<Func<Result, Task<Result>>>();
-    
+    private Func<Error, Task<Result>>? errorHandler = null;
+
+
     public Pipeline First(Func<Task<Result>> workload)
     {
         steps.Add(async (_) => await workload());
@@ -14,7 +16,7 @@ public class Pipeline
     
     public Pipeline First(Func<Result> workload)
     {
-        steps.Add(async (_) => await Task.Run<Result>(workload));
+        steps.Add((_) => Task.FromResult<Result>(workload()));
         return this;
     }
     
@@ -27,7 +29,19 @@ public class Pipeline
     
     public Pipeline Then<TInput>(Func<TInput, Result> workload)
     {
-        steps.Add(UnwrapResult<TInput>(async (prev) => await Task.Run<Result>(() => workload(prev))));
+        steps.Add(UnwrapResult<TInput>((prev) => Task.FromResult<Result>(workload(prev))));
+        return this;
+    }
+
+    public Pipeline HandleError(Func<Error, Result> errorHandler)
+    {
+        this.errorHandler = (error) => Task.FromResult(errorHandler(error));
+        return this;
+    }
+
+    public Pipeline HandleError(Func<Error, Task<Result>> errorHandler)
+    {
+        this.errorHandler = errorHandler;
         return this;
     }
 
@@ -43,8 +57,13 @@ public class Pipeline
             {
                 current = new Error(ex);
             }
-            
-            if(current is Error) break;
+
+            if(current is Error error) {
+                if(errorHandler != null) current = await this.errorHandler(error);
+
+                if(!current.IsSuccess)
+                    break;
+            }
         }
 
         return current;

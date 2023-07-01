@@ -13,10 +13,18 @@ public abstract class Result
 
     public T? Unwrap<T>()
     {
-        if(this is Success<T> success)
+        if(this is Result<T> success)
             return success.Value;
         
         return default(T);
+    }
+
+    public bool IsSuccess {
+        get
+        {
+            return this is Success || 
+                   (this.GetType().IsGenericType && this.GetType().GetGenericTypeDefinition() == typeof(Success<>));
+        }        
     }
 }
 
